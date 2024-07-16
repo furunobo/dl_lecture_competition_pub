@@ -2,6 +2,7 @@ import torch
 import hydra
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 import random
 import numpy as np
 from src.models.evflownet import EVFlowNet
@@ -35,6 +36,15 @@ def compute_epe_error(pred_flow: torch.Tensor, gt_flow: torch.Tensor):
     '''
     epe = torch.mean(torch.mean(torch.norm(pred_flow - gt_flow, p=2, dim=1), dim=(1, 2)), dim=0)
     return epe
+
+def add_intermediate_loss(pred_flow, gt_flow, flow_dict):
+    loss = compute_epe_error(pred_flow, gt_flow)
+
+    for _, i in flow_dict.items():
+        resize = F.interpolate(i, size=gt_flow.size()[2:], mode="bilinear", align_corners=True)
+        loss += compute_epe_error(resize, gt_flow)
+
+    return loss
 
 def save_optical_flow_to_npy(flow: torch.Tensor, file_name: str):
     '''
