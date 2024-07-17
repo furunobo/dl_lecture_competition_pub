@@ -41,8 +41,8 @@ def add_intermediate_loss(pred_flow, gt_flow, flow_dict):
     loss = compute_epe_error(pred_flow, gt_flow)
 
     for _, i in flow_dict.items():
-        resize = F.interpolate(i, size=gt_flow.size()[2:], mode="bilinear", align_corners=True)
-        loss += compute_epe_error(resize, gt_flow)
+        resize = F.adaptive_avg_pool2d(gt_flow, (i.size()[2], i.size()[3]))
+        loss += 0.01 * compute_epe_error(resize, i)
 
     return loss
 
@@ -138,7 +138,7 @@ def main(args: DictConfig):
             event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
             ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
             flow, flow_dict = model(event_image) # [B, 2, 480, 640]
-            loss: torch.Tensor = add_intermediate_loss(flow, ground_truth_flow, flow_dict)
+            loss: torch.Tensor = add_intermediate_loss(flow, ground_truth_flow, flow_dict) / (1 + 0.01 * len(flow_dict))
             print(f"batch {i} loss: {loss.item()}")
             optimizer.zero_grad()
             loss.backward()
@@ -167,7 +167,7 @@ def main(args: DictConfig):
         for batch in tqdm(test_data):
             batch: Dict[str, Any]
             event_image = batch["event_volume"].to(device)
-            batch_flow = model(event_image) # [1, 2, 480, 640]
+            batch_flow, _ = model(event_image) # [1, 2, 480, 640]
             flow = torch.cat((flow, batch_flow), dim=0)  # [N, 2, 480, 640]
         print("test done")
     # ------------------
